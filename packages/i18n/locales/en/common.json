@@ -565,6 +565,7 @@
   "before_event": "Before event",
   "after_event": "After event",
   "event_buffer_default": "No buffer time",
+  "buffer_time_after_meeting": "Buffer time after meeting",
   "buffer": "Buffer",
   "your_day_starts_at": "Your day starts at",
   "your_day_ends_at": "Your day ends at",

@@ -148,6 +148,7 @@ export type FormValues = {
   maxActiveBookingsPerBooker: number | null;
   beforeEventBuffer: number;
   afterEventBuffer: number;
+  bufferTime: number;
   slotInterval: number | null;
   metadata: z.infer<typeof eventTypeMetaDataSchemaWithTypedApps>;
   destinationCalendar: {
@@ -362,6 +363,7 @@ export type EventTypeUpdateInput = {
   minimumBookingNotice?: number;
   beforeEventBuffer?: number;
   afterEventBuffer?: number;
+  bufferTime?: number;
   seatsPerTimeSlot?: number | null;
   onlyShowFirstAvailableSlot?: boolean;
   showOptimizedSlots?: boolean | null;

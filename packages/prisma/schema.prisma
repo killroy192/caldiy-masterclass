@@ -219,6 +219,7 @@ model EventType {
   minimumBookingNotice                     Int                    @default(120)
   beforeEventBuffer                        Int                    @default(0)
   afterEventBuffer                         Int                    @default(0)
+  bufferTime                               Int                    @default(0)
   seatsPerTimeSlot                         Int?
   onlyShowFirstAvailableSlot               Boolean                @default(false)
   showOptimizedSlots                       Boolean?               @default(false)

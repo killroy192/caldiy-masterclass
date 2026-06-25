@@ -1185,3 +1185,60 @@ describe("Tests 40-minute duration slot generation", () => {
     expect(slots).toHaveLength(4);
   });
 });
+
+describe("Tests the slot logic with post-meeting bufferTime", () => {
+  beforeAll(() => {
+    vi.setSystemTime(dayjs.utc("2021-06-20T11:59:59Z").toDate());
+  });
+
+  it("with bufferTime=15, a 60min event blocks the T+60→T+75 window so the next slot starts at T+75", async () => {
+    // T = 09:00. Range 09:00–11:30 (150 min), 60min event, back-to-back frequency.
+    const nextDay = dayjs.utc().add(1, "day").startOf("day");
+    const dateRanges = [{ start: nextDay.hour(9), end: nextDay.hour(11).minute(30) }];
+
+    const slots = getSlots({
+      inviteeDate: nextDay,
+      frequency: 60,
+      minimumBookingNotice: 0,
+      dateRanges,
+      eventLength: 60,
+      offsetStart: 0,
+      bufferTime: 15,
+    });
+
+    const times = slots.map((slot) => slot.time.format("HH:mm"));
+
+    // Without buffer the next slot would be T+60 (10:00); the 15min buffer pushes it to T+75 (10:15).
+    expect(times).toStrictEqual(["09:00", "10:15"]);
+    // The T+60→T+75 window is unavailable.
+    expect(times).not.toContain("10:00");
+  });
+
+  it("with bufferTime=0, slots are identical to the baseline (no buffer passed)", async () => {
+    const nextDay = dayjs.utc().add(1, "day").startOf("day");
+    const dateRanges = [{ start: nextDay.hour(9), end: nextDay.hour(17) }];
+
+    const baseline = getSlots({
+      inviteeDate: nextDay,
+      frequency: 60,
+      minimumBookingNotice: 0,
+      dateRanges,
+      eventLength: 60,
+      offsetStart: 0,
+    });
+
+    const withZeroBuffer = getSlots({
+      inviteeDate: nextDay,
+      frequency: 60,
+      minimumBookingNotice: 0,
+      dateRanges,
+      eventLength: 60,
+      offsetStart: 0,
+      bufferTime: 0,
+    });
+
+    expect(withZeroBuffer.map((slot) => slot.time.format())).toStrictEqual(
+      baseline.map((slot) => slot.time.format())
+    );
+  });
+});
