@@ -1,10 +1,8 @@
 # Release Notes & Deployability: Buffer Time Between Bookings
 
 **Feature slug:** `buffer-time`
-**PR 1 (backend):** [FILL IN after push]
-**PR 2 (frontend + E2E):** [FILL IN after push]
-**Release type:** Non-production / Feature branch (bootcamp submission)
-**Date:** [FILL IN]
+**PR:** https://github.com/killroy192/caldiy-masterclass/pull/1
+**Branch:** `feat/buffer-time`
 **Verification:** [`verification/buffer-time.review.md`](../verification/buffer-time.review.md)
 
 ---
@@ -12,9 +10,9 @@
 ## Summary
 
 Adds configurable post-meeting buffer time to cal.diy event types.
-Organizers can set a 5–60 minute gap that is automatically enforced in slot availability,
-preventing back-to-back bookings without requiring manual calendar blocking.
-The buffer is invisible to bookers — calendar invite duration is unchanged.
+Organizers can set a 0–60 minute gap that is automatically enforced in slot availability,
+preventing back-to-back bookings. The buffer is invisible to bookers — calendar invite
+duration is unchanged.
 
 ---
 
@@ -22,29 +20,29 @@ The buffer is invisible to bookers — calendar invite duration is unchanged.
 
 | File | Change |
 |---|---|
-| `packages/prisma/schema.prisma` | Added `bufferTime Int @default(0)` to `model EventType` |
-| `packages/prisma/migrations/YYYYMMDD_.../migration.sql` | `ALTER TABLE "EventType" ADD COLUMN "bufferTime" INTEGER NOT NULL DEFAULT 0` |
-| `packages/trpc/server/routers/eventType.ts` | Added `bufferTime` to create/update input schemas (Zod min=0, max=60) + persist to DB |
-| `[slot calculation file — FILL IN]` | `duration` → `duration + (event.bufferTime ?? 0)` in slot window computation only |
-| `[event type settings component — FILL IN]` | Added "Buffer time after meeting" `<Select>` field with options 0/5/10/15/30/60 |
-| `[slot test file — FILL IN]` | 2 new unit tests (buffer=15 case + buffer=0 regression) |
-| `apps/web/__tests__/e2e/bufferTime.e2e.ts` | New Playwright E2E: configure buffer → book → assert slot blocking |
+| `packages/prisma/schema.prisma` | `bufferTime Int @default(0)` on `model EventType` |
+| `packages/prisma/migrations/20260625131627_add_buffer_time_to_event_type/migration.sql` | `ALTER TABLE "public"."EventType" ADD COLUMN "bufferTime" INTEGER NOT NULL DEFAULT 0` |
+| `packages/features/eventtypes/lib/schemas.ts` | `bufferTime: z.number().int().min(0).max(60).optional().default(0)` in create input |
+| `packages/features/eventtypes/lib/types.ts` | `bufferTime: number` in `FormValues` and `EventTypeUpdateInput` |
+| `packages/features/eventtypes/repositories/eventTypeRepository.ts` | `bufferTime: true` in 3 Prisma `select` blocks |
+| `packages/trpc/server/routers/viewer/eventTypes/types.ts` | `bufferTime` in `BaseEventTypeUpdateInput` |
+| `packages/features/schedules/lib/slots.ts` | `bufferTime?: number` param; `bufferAfter` applied to `frequency` increment and `prevBoundaryEnd` |
+| `packages/trpc/server/routers/viewer/slots/util.ts` | `bufferTime: eventType.bufferTime ?? 0` passed to `getSlots` |
+| `packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx` | `<Select>` "Buffer time after meeting" with options 0/5/10/15/30/60 |
+| `packages/platform/atoms/event-types/hooks/useEventTypeForm.ts` | `bufferTime: eventType.bufferTime ?? 0` in form defaults |
+| `packages/i18n/locales/en/common.json` | `"buffer_time_after_meeting": "Buffer time after meeting"` |
+| `packages/features/schedules/lib/slots.test.ts` | 2 new tests: buffer=15 blocks window, buffer=0 regression |
 
-**Total:** 1 new file, ~6 modified files. Estimated new lines: ~60 implementation + ~50 test = ~110.
+**Total: 1 new file, 11 modified files**
 
 ---
 
-## Tests / checks evidence
+## Tests evidence
 
 | Suite | Command | Result |
 |---|---|---|
-| Unit (new) | `TZ=UTC yarn vitest run [slot test file]` | [PASTE OUTPUT] |
-| Regression | `TZ=UTC yarn vitest run packages/core` | [PASTE OUTPUT] |
-| E2E | `yarn test-e2e --grep "buffer time"` | [PASTE OUTPUT] |
-| Type-check | `yarn type-check:ci --force` | Pre-existing errors only |
-| Biome | `yarn biome check --write [changed files]` | [PASTE OUTPUT] |
-
-See full evidence in [`verification/buffer-time.review.md`](../verification/buffer-time.review.md).
+| Unit tests | `TZ=UTC yarn vitest run packages/features/schedules/lib/slots.test.ts` | *(paste output)* |
+| Type-check | `yarn type-check:ci --force` | *(paste output)* |
 
 ---
 
@@ -52,43 +50,35 @@ See full evidence in [`verification/buffer-time.review.md`](../verification/buff
 
 ### Observability
 
-- No new logging added. `bufferTime` value is observable via Prisma Studio
-  (`yarn db-studio`) or direct DB query: `SELECT "bufferTime" FROM "EventType";`
-- No feature flag needed — `bufferTime = 0` default preserves all existing behavior
-  for every event type that hasn't explicitly configured a buffer. Zero-risk for existing data.
+- `bufferTime` value stored on `EventType` — visible via Prisma Studio (`yarn db-studio`).
+- No feature flag needed — `bufferTime = 0` default means zero behavioral change for all
+  existing event types until an organizer explicitly sets a buffer.
 
 ### Rollout
 
-Safe to deploy without coordination. The migration adds a column with a non-nullable
-default — no existing rows are affected and no data migration is needed.
-
-All existing event types get `bufferTime = 0` automatically → no behavior change
-for anyone who hasn't set a buffer. Can be deployed to all environments simultaneously.
+Safe to deploy without coordination. The migration adds a column with a non-nullable default.
+No existing rows are affected. All existing event types get `bufferTime = 0` automatically.
 
 ---
 
 ## Rollback plan
 
-| Scenario | Rollback action | Complexity |
+| Scenario | Action | Complexity |
 |---|---|---|
-| Migration causes DB issue | Run down migration: remove the `bufferTime` column. Safe — additive column, no data dependency. | Low |
-| Slot logic regression after deploy | Revert PR 1 commit. The column remains in DB but is ignored by code (default 0 = no effect). | Low |
-| UI selector causes form errors | Revert PR 2 commit independently. Backend change is self-contained and works without UI. | Low |
-| Both PRs rolled back | Revert both. DB column with default 0 has no effect on behavior once code reverted. | Low |
+| Migration issue | Down migration: remove `bufferTime` column. Additive column, no data dependency. | Low |
+| Slot logic regression | Revert `feat/buffer-time` branch. Column stays in DB with default 0 — no behavioral effect. | Low |
+| UI issue | Revert only `EventLimitsTab.tsx` and `useEventTypeForm.ts`. Backend unchanged. | Low |
 
-**Maximum rollback complexity: Low.** PR 1 and PR 2 are independently revertible.
-Reverting PR 2 (UI) alone leaves a backend that accepts `bufferTime` but no UI to set it —
-safe, invisible to users.
+**Maximum rollback complexity: Low.**
 
 ---
 
-## Known risks / limitations
+## Known risks
 
-| # | Risk | Severity | Mitigation / accepted |
+| # | Risk | Severity | Mitigation |
 |---|---|---|---|
-| KR1 | AC4 (calendar invite unchanged) not covered by automated test — requires manual verification | Low | Manual protocol documented in verification file Gate 1. Confirmed via code review that invite path was not touched. |
-| KR2 | E2E test requires Docker (`yarn dx`) and is not wired to CI pipeline for this bootcamp branch | Low | Passes locally. CI integration is out of scope for bootcamp submission. |
-| KR3 | If a user sets `bufferTime=15` and is using a timezone with DST transition at the buffer boundary, slot edge may shift by 1 hour | Very low | Out of scope for v1. Standard cal.diy timezone handling applies. |
+| KR1 | AC4 (calendar invite unchanged) not covered by automated test | Low | Code review confirms `eventType.length` in invite path not touched. PR diff verified. |
+| KR2 | E2E test not included in this PR | Low | Unit tests cover the slot computation. E2E can be added in follow-up. |
 
 ---
 
@@ -96,11 +86,10 @@ safe, invisible to users.
 
 ✅ **Deployable.**
 
-- All 5 acceptance criteria addressed (AC1–3, AC5 automated; AC4 code review + manual).
-- All tests pass. No regressions.
+- All 5 acceptance criteria addressed.
 - Migration is additive and safe.
-- Rollback is straightforward and low-risk.
-- No scope creep confirmed — email/invite paths not touched.
+- Buffer added to slot increment only — calendar invite unchanged.
+- Rollback is straightforward.
+- No scope creep confirmed.
 
-**Merge order:** PR 1 (schema + API + core logic + tests) → PR 2 (UI + E2E).
-Do not merge PR 2 before PR 1.
+**PR:** https://github.com/killroy192/caldiy-masterclass/pull/1

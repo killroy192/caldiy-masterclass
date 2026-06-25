@@ -3,91 +3,64 @@
 **Feature slug:** `buffer-time`
 **Story:** [`specs/buffer-time.story.md`](../specs/buffer-time.story.md)
 **Spec:** [`specs/buffer-time.spec.md`](../specs/buffer-time.spec.md)
+**PR:** https://github.com/killroy192/caldiy-masterclass/pull/1
 
 ---
 
-## HOT context — directly required for this feature right now
+## HOT — directly required for this feature
 
 ### Spec & Story
 
-| Artefact | Path | Notes |
+| Artefact | Path |
+|---|---|
+| User story | `artifacts/a3-buffer-time/specs/buffer-time.story.md` |
+| Technical spec | `artifacts/a3-buffer-time/specs/buffer-time.spec.md` |
+
+### Active files — slot logic
+
+| File | Role | What changed |
 |---|---|---|
-| User story | `specs/buffer-time.story.md` | Fixed scope: post-meeting buffer, 5 AC, out-of-scope list. |
-| Technical spec | `specs/buffer-time.spec.md` | Decisions D-1/D-2/D-3; all 5 AC; open questions; spec self-check. |
+| `packages/features/schedules/lib/slots.ts` | Core slot computation | Added `bufferTime?: number` param; `bufferAfter` variable; applied to `frequency + bufferAfter` in slot increment and `prevBoundaryEnd` |
+| `packages/features/schedules/lib/slots.test.ts` | Slot tests | Added 2 new test cases |
+| `packages/trpc/server/routers/viewer/slots/util.ts` | `getSlots` caller | Added `bufferTime: eventType.bufferTime ?? 0` to the `getSlots` call |
 
-### Active files — database
+### Active files — data model & API
 
-| File | Role | Why it matters |
+| File | Role | What changed |
 |---|---|---|
-| `packages/prisma/schema.prisma` → `model EventType` | Schema to modify | Agent needs current `EventType` field list to add `bufferTime Int @default(0)` correctly without conflicts. |
-| `packages/prisma/migrations/` | Migration destination | Agent must follow existing migration naming convention (timestamp prefix). |
-
-### Active files — API / tRPC
-
-| File | Role | Why it matters |
-|---|---|---|
-| `packages/trpc/server/routers/viewer/eventTypes/types.ts` | tRPC input schema | Contains create/update Zod schemas; agent needs to see existing pattern (e.g. `minimumBookingNotice`, `afterEventBuffer`) to follow the same structure for `bufferTime`. |
-| `packages/trpc/server/routers/viewer/eventTypes/heavy/create.handler.ts` | Create mutation | Persists new event type fields. |
-| `packages/trpc/server/routers/viewer/eventTypes/heavy/update.handler.ts` | Update mutation | Persists updated event type fields. |
-| `packages/features/eventtypes/lib/schemas.ts` | Shared Zod schema | Event type input validation used across create/update flows. |
-
-### Active files — core slot logic
-
-| File | Role | Why it matters |
-|---|---|---|
-| `packages/features/schedules/lib/slots.ts` | Slot-generation function (`getSlots`) | Primary file where `bufferTime` may change slot computation. Most critical file. Must be confirmed by research before Step 4 — do not guess. |
-| `packages/features/busyTimes/services/getBusyTimes.ts` | Busy-period blocking | Applies existing `beforeEventBuffer` / `afterEventBuffer` when marking slots unavailable — likely also relevant for post-meeting buffer. |
-| `packages/features/schedules/lib/slots.test.ts` | Slot-calculation tests | Baseline for regression. Agent must not break these. New tests co-located here. |
+| `packages/prisma/schema.prisma` | DB schema | `bufferTime Int @default(0)` on `EventType` |
+| `packages/prisma/migrations/20260625131627_add_buffer_time_to_event_type/migration.sql` | Migration | `ALTER TABLE "public"."EventType" ADD COLUMN "bufferTime" INTEGER NOT NULL DEFAULT 0` |
+| `packages/features/eventtypes/lib/schemas.ts` | Zod schema | `bufferTime: z.number().int().min(0).max(60).optional().default(0)` |
+| `packages/features/eventtypes/lib/types.ts` | TypeScript types | `bufferTime: number` in `FormValues` and `EventTypeUpdateInput` |
+| `packages/features/eventtypes/repositories/eventTypeRepository.ts` | DB repository | `bufferTime: true` in 3 `select` blocks |
+| `packages/trpc/server/routers/viewer/eventTypes/types.ts` | tRPC input types | `bufferTime` in `BaseEventTypeUpdateInput` |
 
 ### Active files — frontend
 
-| File | Role | Why it matters |
+| File | Role | What changed |
 |---|---|---|
-| `packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx` | Event type limits/buffer settings | Where existing buffer controls (`beforeEventBuffer`, `afterEventBuffer`) and `minimumBookingNotice` live. Follow this component's Select/Controller pattern for the new field. |
-| `apps/web/app/(use-page-wrapper)/event-types/[type]/page.tsx` | Event type settings route | App Router entry point that renders the event type settings UI. |
+| `packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx` | UI settings | Added `<Select>` "Buffer time after meeting" with options 0/5/10/15/30/60 |
+| `packages/platform/atoms/event-types/hooks/useEventTypeForm.ts` | Form hook | `bufferTime: eventType.bufferTime ?? 0` in form defaults |
+| `packages/i18n/locales/en/common.json` | i18n | `"buffer_time_after_meeting": "Buffer time after meeting"` |
 
 ---
 
-## WARM context — reusable guidance, always active
+## WARM — reusable guidance, always active
 
-### Project configuration
-
-| Item | Path | Key rules for this feature |
-|---|---|---|
-| AGENTS.md | Repo root | Use `select` not `include` in Prisma queries; `import type` for type imports; direct paths, no barrel imports; conventional commits (`feat:`); PRs < 500 lines. |
-| `.cursor/rules/` | Repo root | Repo-specific cursor rules — check for TypeScript, Prisma, and tRPC conventions before generating code. |
-
-### Similar field pattern (follow this, don't invent)
-
-| File | Detail |
+| Item | Detail |
 |---|---|
-| `minimumBookingNotice` in `schema.prisma` | Template for how an optional integer field is declared on `EventType`. |
-| `afterEventBuffer` in `schema.prisma` | Existing post-meeting buffer field — closest structural analogue to `bufferTime`. |
-| `minimumBookingNotice` / `afterEventBuffer` in `packages/trpc/server/routers/viewer/eventTypes/types.ts` and `packages/features/eventtypes/lib/schemas.ts` | Template for how a Zod-validated optional integer is accepted and persisted in the tRPC mutation. |
-| `minimumBookingNotice` / `afterEventBuffer` in `packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx` | Template for how similar numeric controls are rendered (Select + Controller pattern). |
-
-### Commands reference
-
-| Command | When to use |
-|---|---|
-| `yarn workspace @calcom/prisma db-migrate --name [name]` | After schema change |
-| `yarn vitest run [file]` | Targeted test run (use TZ=UTC prefix if timezone-sensitive) |
-| `yarn type-check:ci --force` | Before every push |
-| `yarn biome check --write [files]` | Lint + format changed files |
-| `yarn dx` | Start local stack (Docker required) |
-| `yarn test-e2e --grep "[pattern]"` | Targeted Playwright run |
+| `AGENTS.md` (repo root) | Use `select` not `include` in Prisma — followed: all 3 repository selects use `bufferTime: true` |
+| `beforeEventBuffer` / `afterEventBuffer` pattern | Template for how other buffer fields are declared and handled — `bufferTime` follows the same pattern throughout |
+| `minimumBookingNotice` pattern | Template for optional integer field in Zod schema and tRPC types |
 
 ---
 
-## COLD context — investigate only if needed
+## COLD — referenced only if needed
 
-| Area | Path | When to access |
-|---|---|---|
-| Slot pipeline internals | `packages/trpc/server/routers/viewer/slots/util.ts` | Only if slot generation has unexpected dependencies in Step 4. |
-| Booking confirmation page | `apps/web/` — booking success/confirmation component | Only to confirm buffer is NOT shown there (verify D-2). Read-only. |
-| Playwright test helpers / fixtures | `apps/web/playwright/` | Only when writing E2E test in Step 7. |
-| tRPC mutation shape for event type | `packages/trpc/server/routers/viewer/eventTypes/` (full router) | Only if the create/update mutation input shape is significantly different from what the Zod pattern suggests. |
-| `CONTRIBUTING.md` | Repo root | Only if unsure about PR process, naming conventions, or commit format. |
+| File | When |
+|---|---|
+| `packages/features/eventtypes/lib/eventTypeUtils.ts` | If form default handling needed deeper investigation |
+| `packages/trpc/server/routers/viewer/eventTypes/` handlers | Only if update mutation needed additional wiring |
 
 ---
 
@@ -95,36 +68,22 @@
 
 | Resource | Reason |
 |---|---|
-| `packages/emails/` and all email templates | AC4/D-2: buffer must be invisible. Including email files increases risk of agent "helpfully" adding buffer display in emails. |
-| Calendar invite generation code | AC4/D-2: invite duration must remain `event.length`. Same risk as emails. |
-| Public booking page components | Buffer must not appear to the booker. Agent must not modify the booker-facing slot display. |
-| `packages/app-store/` (all) | Third-party integrations — completely unrelated to this feature. |
-| `deploy/`, `docker-compose.yml` | Infrastructure — not touched. |
-| Recurring events logic | Non-goal per spec. |
-| Team / org routing code | Non-goal per spec. |
-| `packages/prisma/migrations/` (historical migrations) | Read-only context. Only the new migration is created — old ones are not touched. |
+| `packages/emails/` | AC4/D-2: buffer must be invisible to booker. Not in PR diff ✅ |
+| Calendar invite generation | AC4/D-2: invite duration = `eventType.length` unchanged. Not in PR diff ✅ |
+| Public booking page components | Buffer must not appear to the booker. Not in PR diff ✅ |
+| Recurring events logic | Non-goal per spec. Not in PR diff ✅ |
+| `InstantMeetingToken` / team flows | Non-goal per spec. Not in PR diff ✅ |
 
 ---
 
-## Context decisions and rationale
+## Context decisions
+
+**Why `bufferTime` is added to `frequency + bufferAfter`, not to `eventLength`:**
+`eventLength` controls the slot boundary check — whether a slot fits within the available range.
+`frequency + bufferAfter` controls where the *next* slot starts. Buffer belongs in the increment
+so that the meeting itself is still `eventLength` minutes (same invite duration — D-2 preserved),
+but the next bookable slot starts `bufferAfter` minutes later.
 
 **Why email and calendar invite files are in IGNORE:**
-D-2 decision requires the buffer to be invisible to the booker. Keeping these files
-out of context enforces the scope boundary mechanically — if the agent can't "see"
-the confirmation email template, it can't add buffer display there even if it tries.
-This is an active context pollution prevention decision, not an oversight.
-
-**Why the slot function is marked TBD (filled in after Stage 1 research):**
-Auto model hallucinated `getAvailableSlots` as the function name — it does not exist
-under that name in this repo. Rather than trust model memory, we use Ask mode to
-confirm the exact file path before any code is written. Stage 1 is a mandatory gate.
-
-**Why `minimumBookingNotice` is in WARM, not HOT:**
-It is not being changed. It serves only as a structural pattern reference — how to
-add a Zod-validated optional integer to both the schema and the tRPC router. D-1
-confirms it is semantically independent from `bufferTime`.
-
-**Context map format used:**
-Standard HOT/WARM/COLD/IGNORE with three sub-layers in HOT (spec, database, slot logic,
-frontend). No modifications to the template were needed — all four tiers were meaningful
-for this feature scope.
+Decision D-2 requires buffer to be invisible to the booker. Having these files in context
+would risk the agent adding buffer display there. Confirmed absent from PR diff.

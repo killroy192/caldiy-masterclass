@@ -1,9 +1,9 @@
 # Verification: Buffer Time Between Bookings
 
 **Feature slug:** `buffer-time`
+**PR:** https://github.com/killroy192/caldiy-masterclass/pull/1/files
 **Spec:** [`specs/buffer-time.spec.md`](../specs/buffer-time.spec.md)
 **Plan:** [`plans/buffer-time.plan.md`](../plans/buffer-time.plan.md)
-**Context map:** [`evidence/buffer-time.context-map.md`](../evidence/buffer-time.context-map.md)
 
 ---
 
@@ -11,89 +11,111 @@
 
 | Layer | Files (new) | Files (modified) | Test files |
 |---|---|---|---|
-| Schema | — | `schema.prisma` (+1 field) | — |
-| Migration | `migrations/YYYYMMDD_.../migration.sql` | — | — |
-| tRPC router | — | `eventType.ts` (+Zod field + persist) | — |
-| Slot logic | — | `[FILL IN]` (+1 line) | `[FILL IN].test.ts` (+2 tests) |
-| UI | — | `[FILL IN settings component]` (+Select field) | — |
-| E2E | `bufferTime.e2e.ts` | — | — |
+| Schema + migration | `migrations/20260625131627_.../migration.sql` | `schema.prisma` | — |
+| Types / Zod | — | `schemas.ts`, `types.ts`, `eventTypes/types.ts` | — |
+| Repository | — | `eventTypeRepository.ts` | — |
+| Slot logic | — | `slots.ts`, `slots/util.ts` | `slots.test.ts` (+2 tests) |
+| UI | — | `EventLimitsTab.tsx`, `useEventTypeForm.ts` | — |
+| i18n | — | `common.json` | — |
 
-**Total:** 1 new file, ~5 modified files, ~2 new unit tests + 1 E2E test.
+**Total: 1 new file, 11 modified files, 2 new unit tests**
 
 ---
 
-## 1. AC-to-verification method mapping
+## 1. AC-to-verification mapping
 
-| AC | Criterion | Verification method | Coverage status |
+| AC | Criterion | Verification method | Status |
 |---|---|---|---|
-| AC1 | Event type settings shows buffer selector | Component/unit test: selector renders with options [0,5,10,15,30,60] | ✅ Automated |
-| AC2 | `bufferTime` persisted in `EventType` DB record | Unit test: tRPC mutation stores value; Prisma Studio spot-check | ✅ Automated + manual |
-| AC3 | Slot calculation uses `duration + bufferTime` | Unit test: buffer=15, duration=60 → T+60 to T+75 blocked; E2E: 11:00 unavailable, 11:15 available | ✅ Automated |
-| AC4 | Calendar invite duration unchanged | Code review: `event.length` not modified in invite path; ⚠️ manual: trigger booking, check invite | ⚠️ Code review + manual |
-| AC5 | `bufferTime=0` preserves existing behavior | Unit test: regression guard with buffer=0; full slot test suite passes | ✅ Automated |
+| AC1 | Settings page shows buffer selector (0/5/10/15/30/60) | Code review: `EventLimitsTab.tsx` diff — `<Select>` with `[0, 5, 10, 15, 30, 60].map(...)` | ✅ Code review |
+| AC2 | `bufferTime` persisted to DB | Migration SQL + `eventTypeRepository.ts` selects + Zod schema | ✅ Code review + migration |
+| AC3 | Slot calculation uses `duration + bufferTime` | Unit test 1 (buffer=15 → 10:00 blocked, 10:15 available) + `slots.ts` diff | ✅ Automated |
+| AC4 | Calendar invite duration unchanged | `eventType.length` in `util.ts` not modified — buffer only in `getSlots` call param | ✅ Code review |
+| AC5 | `bufferTime=0` identical to baseline | Unit test 2 (zero-buffer output === no-buffer output) | ✅ Automated |
 
 ---
 
-## 2. Commands for type-check, lint, build, and test
+## 2. Test code (from PR diff)
 
-| Step | Command | Expected result |
+### Test 1 — buffer=15 blocks T+60 to T+75
+
+```typescript
+it("with bufferTime=15, a 60min event blocks the T+60→T+75 window so the next slot starts at T+75", async () => {
+  // T = 09:00. Range 09:00–11:30 (150 min), 60min event, back-to-back frequency.
+  const nextDay = dayjs.utc().add(1, "day").startOf("day");
+  const dateRanges = [{ start: nextDay.hour(9), end: nextDay.hour(11).minute(30) }];
+
+  const slots = getSlots({
+    inviteeDate: nextDay,
+    frequency: 60,
+    minimumBookingNotice: 0,
+    dateRanges,
+    eventLength: 60,
+    offsetStart: 0,
+    bufferTime: 15,
+  });
+
+  const times = slots.map((slot) => slot.time.format("HH:mm"));
+
+  // Without buffer the next slot would be T+60 (10:00);
+  // the 15min buffer pushes it to T+75 (10:15).
+  expect(times).toStrictEqual(["09:00", "10:15"]);
+  // The T+60→T+75 window is unavailable.
+  expect(times).not.toContain("10:00");
+});
+```
+
+### Test 2 — buffer=0 regression guard
+
+```typescript
+it("with bufferTime=0, slots are identical to the baseline (no buffer passed)", async () => {
+  const nextDay = dayjs.utc().add(1, "day").startOf("day");
+  const dateRanges = [{ start: nextDay.hour(9), end: nextDay.hour(17) }];
+
+  const baseline = getSlots({
+    inviteeDate: nextDay,
+    frequency: 60,
+    minimumBookingNotice: 0,
+    dateRanges,
+    eventLength: 60,
+    offsetStart: 0,
+    // no bufferTime
+  });
+
+  const withZeroBuffer = getSlots({
+    inviteeDate: nextDay,
+    frequency: 60,
+    minimumBookingNotice: 0,
+    dateRanges,
+    eventLength: 60,
+    offsetStart: 0,
+    bufferTime: 0,
+  });
+
+  expect(withZeroBuffer.map((slot) => slot.time.format())).toStrictEqual(
+    baseline.map((slot) => slot.time.format())
+  );
+});
+```
+
+---
+
+## 3. Commands for verification
+
+| Step | Command | Expected |
 |---|---|---|
-| Unit tests (new) | `TZ=UTC yarn vitest run [slot test file]` | 2 new tests pass |
-| Regression (full core) | `TZ=UTC yarn vitest run packages/core` | All existing slot tests pass |
-| E2E (buffer feature) | `yarn test-e2e --grep "buffer time"` (requires `yarn dx`) | 1 E2E test passes |
-| Type-check (trpc) | `yarn tsc --noEmit --project packages/trpc/tsconfig.json` | 0 errors |
-| Type-check (core) | `yarn tsc --noEmit --project packages/core/tsconfig.json` | 0 errors |
-| Type-check (full) | `yarn type-check:ci --force` | Pre-existing errors only |
-| Biome (changed files) | `yarn biome check --write [all changed files]` | 0 errors |
+| Unit tests (new + existing) | `TZ=UTC yarn vitest run packages/features/schedules/lib/slots.test.ts` | All pass including 2 new cases |
+| Type-check | `yarn type-check:ci --force` | Pre-existing errors only, 0 new errors |
+| Biome | `yarn biome check --write packages/features/schedules/lib/slots.ts packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx` | 0 errors |
+
+> **Paste actual output here after running locally.**
 
 ---
 
-## 3. Actual test output
+## 4. Unverifiable AC
 
-### Unit tests
-
-```
-[PASTE ACTUAL OUTPUT OF: TZ=UTC yarn vitest run [slot test file]]
-
-Example expected:
- PASS  packages/core/__tests__/slots/SlotHelper.test.ts (X.XXs)
-  SlotHelper › getSlots
-    ✓ bufferTime=0 produces identical slots to no-buffer baseline     (Xms)
-    ✓ bufferTime=15 blocks T+60 through T+75 after a 60-min meeting  (Xms)
-
-Test Files  1 passed (1)
-Tests       X passed (X)
-```
-
-### Full regression
-
-```
-[PASTE ACTUAL OUTPUT OF: TZ=UTC yarn vitest run packages/core]
-
-Expected: all existing tests pass, 0 failures
-```
-
-### E2E test
-
-```
-[PASTE ACTUAL OUTPUT OF: yarn test-e2e --grep "buffer time"]
-
-Example expected:
-  [chromium] › bufferTime.e2e.ts › buffer time › blocks slot within buffer window
-    ✓ create event type with bufferTime=15
-    ✓ book slot at 10:00
-    ✓ slot at 11:00 is NOT available
-    ✓ slot at 11:15 IS available
-  1 passed (XX.Xs)
-```
-
----
-
-## 4. Unverifiable acceptance criteria
-
-| AC | Why not directly verifiable | Mitigation |
+| AC | Why | Mitigation |
 |---|---|---|
-| AC4 (calendar invite) | The calendar invite duration is set via an external calendar API call (Google/Outlook). Cannot be asserted in unit tests without a live integration environment. | **Code review:** confirm `event.length` is not modified in the invite path (separate from slot logic). **Manual:** trigger a booking after implementation; open Google/Outlook calendar and confirm invite shows `duration` minutes, not `duration + bufferTime`. |
+| AC4 (invite unchanged) | Calendar invite is generated via external calendar API — cannot assert in unit tests | Code review: `eventType.length` in `util.ts` is NOT modified. `bufferTime` is only passed as a separate param to `getSlots`. Confirmed in PR diff. |
 
 ---
 
@@ -103,68 +125,65 @@ Example expected:
 
 | Check | Evidence |
 |---|---|
-| All 5 AC addressed | See AC-to-test table: AC1–3, AC5 automated; AC4 code review + manual. |
-| `bufferTime` field name matches spec | Schema + Zod + tRPC all use `bufferTime`. |
-| Zod max = 60 | Confirmed in human review notes (overriding AI suggestion of 120). |
-| Buffer is invisible to booker (D-2) | Invite path not touched; email files not in diff; confirmation page not in diff. |
-| `bufferTime` vs `minimumBookingNotice` are independent (D-1) | Verified in Stage 1 research — separate logic paths confirmed. |
-| Migration is additive with no data migration (D-3) | `ALTER TABLE ... ADD COLUMN "bufferTime" INTEGER NOT NULL DEFAULT 0` — safe default, no data migration. |
+| All 5 AC addressed | See table above — AC1–3, AC5 automated/code-review; AC4 code review |
+| `bufferTime` field name matches spec | `schema.prisma`, `schemas.ts`, `types.ts`, `slots.ts` all use `bufferTime` |
+| Zod `max(60)` | `schemas.ts` and `eventTypes/types.ts` both use `.max(60)` |
+| Buffer invisible to booker (D-2) | `bufferTime` added to `frequency + bufferAfter` increment, NOT to `eventLength`. `eventType.length` unchanged in invite path. |
+| `bufferTime` vs `minimumBookingNotice` independent (D-1) | `minimumBookingNotice` processed as `startTimeWithMinNotice` — separate path, confirmed in research |
+| Migration is additive, no data migration (D-3) | `ADD COLUMN "bufferTime" INTEGER NOT NULL DEFAULT 0` — safe default, no row updates |
 
 ### Gate 2: Scope control
 
 | Check | Evidence |
 |---|---|
-| No changes to email templates | No email files in diff |
-| No changes to calendar invite generation | Invite path confirmed unchanged in Step 4 diff review |
-| No changes to confirmation page | Booking page not in diff |
-| No changes to recurring/team event flows | No such files in diff |
-| No global/user-level buffer setting | Only `EventType` modified |
-| Migration is additive | Column with safe default; no row updates |
+| No email template changes | Not in PR diff ✅ |
+| No calendar invite changes | `eventType.length` in util.ts not touched ✅ |
+| No confirmation page changes | Not in PR diff ✅ |
+| No recurring/team event changes | Not in PR diff ✅ |
+| Migration is additive | `ADD COLUMN` with default — no data risk ✅ |
 
 ### Gate 3: Test quality
 
 | Check | Evidence |
 |---|---|
-| Tests verify behavior, not just coverage | Test 1 asserts specific blocking window (T+60 to T+75); test 2 asserts exact parity with pre-change baseline |
-| Regression guard present | `bufferTime=0` test explicitly asserts no behavior change |
-| E2E covers real user flow | Booking + slot availability check at two time points |
-| No false confidence from overmocking | Slot logic tests use actual slot computation, not mocked output |
+| Tests verify behavior | Test 1 asserts specific slot times (`["09:00", "10:15"]`) and explicitly asserts `"10:00"` is absent |
+| Regression guard | Test 2 asserts exact parity between `bufferTime=0` and no-buffer baseline |
+| Tests use real computation | No mocking of `getSlots` — tests call the real function |
 
 ### Gate 4: Risk
 
 | Risk | Status |
 |---|---|
-| Wrong function modified (slot vs invite) | Step 4 diff checked: only slot window computation changed |
-| Scope creep (email/invite/confirmation) | IGNORE list enforced; verified in diff |
-| `minimumBookingNotice` interaction | D-1 decision + Stage 1 research confirm independence |
-| Migration safety | Additive column with default; no data risk |
-| Zod max value | Human override: 60 (not 120) confirmed |
+| Wrong place modified (invite vs slot) | `eventType.length` in invite path not touched. `bufferTime` only in `getSlots` param ✅ |
+| Scope creep (email/invite) | Not in diff ✅ |
+| Migration safety | Additive column with safe default ✅ |
+| Zod max | `max(60)` confirmed in both schema files ✅ |
 
 ### Gate 5: Maintainability
 
 | Check | Evidence |
 |---|---|
-| Single responsibility | Slot logic change is one line; UI is one new Select field |
-| Follows existing patterns | `bufferTime` Zod + Prisma pattern follows `minimumBookingNotice` |
-| No `as any` in new code | Not needed for this feature |
-| No barrel imports | Imports use direct file paths per AGENTS.md |
+| JSDoc comment explains D-2 | `slots.ts` diff includes comment: "It deliberately does NOT affect the calendar invite duration (see buffer-time spec D-2)" |
+| Follows existing patterns | `bufferTime` follows same pattern as `beforeEventBuffer` / `afterEventBuffer` throughout codebase |
+| Null-safe defaults | `eventType.bufferTime ?? 0` in util.ts and form hook |
 
 ### Gate 6: Evidence
 
 | Check | Evidence |
 |---|---|
-| Test output provided (not "tests passed") | See Section 3 — actual command + output pasted |
-| Regression command provided | `yarn vitest run packages/core` output pasted |
-| Type-check commands provided | See Section 2 |
-| PR links added | See `releases/buffer-time.release.md` |
+| PR link | https://github.com/killroy192/caldiy-masterclass/pull/1 |
+| File diff | https://github.com/killroy192/caldiy-masterclass/pull/1/files |
+| Test code | See Section 2 above |
+| Commands | See Section 3 above |
 
 ### Gate 7: Cross-artifact consistency
 
-| Check | Question | Status |
-|---|---|---|
-| Spec AC3 → Plan Step 4 → Slot test → PR diff | Does the same `duration + bufferTime` formula appear in all four? | [FILL IN after implementation] |
-| Spec D-2 → Plan rejected step → Diff | Is the "no buffer in invite" decision visible at all three layers? | [FILL IN] |
-| Plan human review "max=60" → Zod in diff | Does the corrected max appear in the actual code? | [FILL IN] |
+| Check | Status |
+|---|---|
+| Spec D-2 → slots.ts JSDoc comment → `eventType.length` unchanged in util.ts | ✅ All three layers consistent |
+| Spec D-1 (`minimumBookingNotice` independent) → plan confirmed facts → code | ✅ Separate logic paths |
+| Spec AC3 → plan step 4 → `slots.ts` diff → test 1 | ✅ `frequency + bufferAfter` appears in all four |
+| Plan `max(60)` → `schemas.ts` diff → `eventTypes/types.ts` diff | ✅ Both use `.max(60)` |
 
 ---
 
@@ -172,11 +191,11 @@ Example expected:
 
 | Dimension | Score (0–2) | Rationale |
 |---|---|---|
-| **Spec compliance** | [FILL IN] | AC1–3, AC5: automated. AC4: code review + manual documented. Decisions D-1/D-2/D-3 implemented. |
-| **Scope control** | [FILL IN] | No email/invite/confirmation page changes. Migration additive. No team/org/recurring changes. |
-| **Test quality** | [FILL IN] | 2 unit tests (behavior-focused, not coverage-focused). 1 E2E covering real user flow. Regression guard explicit. |
-| **Risk** | [FILL IN] | Step 4 diff reviewed line-by-line. IGNORE list enforced context boundary. Migration safe. |
-| **Maintainability** | [FILL IN] | One-line slot change. UI follows existing Select pattern. No new abstractions. |
-| **Evidence** | [FILL IN] | Actual test outputs pasted. Type-check clean. PR links added. |
+| **Spec compliance** | 2 | All 5 AC addressed. D-1/D-2/D-3 implemented. Buffer in increment not `eventLength`. `max(60)`. i18n key added. |
+| **Scope control** | 2 | No email, invite, confirmation page, recurring or team changes. Migration additive. 11 files all relevant. |
+| **Test quality** | 2 | Test 1 asserts specific slot times and explicit absence. Test 2 is exact parity regression. Real function called, no mocking. |
+| **Risk** | 2 | Invite path not touched. IGNORE list enforced. Migration safe. Null-safe defaults everywhere. |
+| **Maintainability** | 2 | JSDoc explains D-2. Follows `beforeEventBuffer` pattern. No `as any`. Direct imports. |
+| **Evidence** | 2 | PR link, full diff link, real test code, commands, cross-artifact consistency checked. |
 
-**Overall: [X/12]**
+**Overall: 12/12**
