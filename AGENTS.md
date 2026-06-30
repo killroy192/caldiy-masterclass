@@ -77,14 +77,95 @@ When a task requires extensive changes, break it into multiple PRs:
 
 ## Commands
 
-See [agents/commands.md](agents/commands.md) for full reference. Key commands:
+# Build, Test & Development Commands
+
+## Development Commands
+
+- `yarn dev` - Start development server for web app
+- `yarn dev:all` - Start web, website, and console apps
+- `yarn dev:api` - Start web app with API proxy and API
+- `yarn dev:console` - Start web app with console
+- `yarn dx` - Start development with database setup
+
+## Build Commands
+
+- `yarn build` - Build all packages and apps
+- `yarn build:ai` - Build AI package specifically
+- `yarn clean` - Remove build artifacts (node_modules, .next, .turbo, dist)
+
+## Lint & Type Check
+
+- `yarn lint` - Run Biome across the codebase
+- `yarn lint:fix` - Run Biome and apply safe fixes
+- `yarn lint:report` - Generate Biome lint report
+- `yarn type-check` - Run TypeScript type checking
+- `yarn format` - Format code with Biome
+
+## Testing Commands
+
+### Unit Tests
+
+- `yarn test` - Run unit tests (vitest)
+- `yarn test <filename>` - Run tests for specific file
+- `yarn test <filename> -t "<testName>"` - Run specific test by name for specific file
+- `yarn tdd` - Run tests in watch mode
+- `yarn test:ui` - Run tests with UI interface
+
+### Integration Tests
+
+- `VITEST_MODE=integration yarn test` - Run integration tests (vitest)
+- `VITEST_MODE=integration yarn test <filename>` - Run integration tests for specific file
+- `VITEST_MODE=integration yarn test <filename> -t "<testName>"` - Run specific integration test by name for specific file
+
+
+### End-to-End Tests
+
+- `yarn e2e` - Run end-to-end tests (Playwright)
+- `yarn e2e <filename>` - Run E2E tests for specific file
+- `yarn e2e <filename> --grep "<testName>"` - Run specific E2E test by name
+- `yarn e2e:app-store` - Run app store E2E tests
+- `yarn e2e:embed` - Run embed E2E tests
+- `yarn test-e2e` - Run database seed + E2E tests
+
+## Database Commands
+
+- `yarn prisma` - Run Prisma CLI commands
+- `yarn db-seed` - Seed database with test data
+- `yarn db-deploy` - Deploy database migrations
+- `yarn db-studio` - Open Prisma Studio
+- `psql "postgresql://postgres:@localhost:5432/calendso"` - Connect to local PostgreSQL database
+
+## App Store Commands
+
+- `yarn create-app` - Create new app store integration
+- `yarn edit-app` - Edit existing app
+- `yarn delete-app` - Delete app
+- `yarn app-store:build` - Build app store
+- `yarn app-store:watch` - Watch app store for changes
+
+## Useful Development Patterns
+
+### Running Single Tests
 
 ```bash
-yarn type-check:ci --force  # Type check (always run before pushing)
-yarn biome check --write .  # Lint and format
-TZ=UTC yarn test            # Run unit tests
-yarn prisma generate        # Regenerate types after schema changes
+# Unit test specific file
+yarn vitest run packages/lib/some-file.test.ts
+
+# Integration test specific file
+VITEST_MODE=integration yarn test routing-form-response-denormalized.integration-test.ts
+
+# E2E test specific file
+yarn e2e tests/booking-flow.e2e.ts
+
+# Run specific test by name
+yarn e2e tests/booking-flow.e2e.ts --grep "should create booking"
 ```
+
+### Environment Setup
+
+- Copy `.env.example` to `.env` and configure
+- Copy `.env.appStore.example` to `.env.appStore` for app store development
+- Run `yarn dx` for initial development setup with database
 
 
 ## Boundaries
@@ -139,106 +220,3 @@ packages/lib/                # Shared utilities
 - **Styling**: Tailwind CSS
 - **Testing**: Vitest (unit), Playwright (E2E)
 - **i18n**: next-i18next
-
-## Code Examples
-
-### Good error handling
-
-```typescript
-// Good - Descriptive error with context
-throw new Error(`Unable to create booking: User ${userId} has no available time slots for ${date}`);
-
-// Bad - Generic error
-throw new Error("Booking failed");
-```
-
-For which error class to use (`ErrorWithCode` vs `TRPCError`) and concrete examples, see [quality-error-handling](agents/rules/quality-error-handling.md).
-
-### Good Prisma query
-
-```typescript
-// Good - Use select for performance and security
-const booking = await prisma.booking.findFirst({
-  select: {
-    id: true,
-    title: true,
-    user: {
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      }
-    }
-  }
-});
-
-// Bad - Include fetches all fields including sensitive ones
-const booking = await prisma.booking.findFirst({
-  include: { user: true }
-});
-```
-
-### Good imports
-
-```typescript
-// Good - Type imports and direct paths
-import type { User } from "@prisma/client";
-import { Button } from "@calcom/ui/components/button";
-
-// Bad - Regular import for types, barrel imports
-import { User } from "@prisma/client";
-import { Button } from "@calcom/ui";
-```
-
-### API v2 Imports (apps/api/v2)
-
-When importing from `@calcom/features` or `@calcom/trpc` into `apps/api/v2`, **do not import directly** because the API v2 app's `tsconfig.json` doesn't have path mappings for these modules, which causes "module not found" errors.
-
-Instead, re-export from `packages/platform/libraries/index.ts` and import from `@calcom/platform-libraries`:
-
-```typescript
-// Step 1: In packages/platform/libraries/index.ts, add the export
-export { ProfileRepository } from "@calcom/features/profile/repositories/ProfileRepository";
-
-// Step 2: In apps/api/v2, import from platform-libraries
-import { ProfileRepository } from "@calcom/platform-libraries";
-
-// Bad - Direct import causes module not found error in apps/api/v2
-import { ProfileRepository } from "@calcom/features/profile/repositories/ProfileRepository";
-```
-
-## PR Checklist
-
-- [ ] Title follows conventional commits: `feat(scope): description`
-- [ ] Type check passes: `yarn type-check:ci --force`
-- [ ] Lint passes: `yarn lint:fix`
-- [ ] Relevant tests pass
-- [ ] Diff is small and focused (<500 lines, <10 files)
-- [ ] No secrets or API keys committed
-- [ ] UI strings added to translation files
-- [ ] Created as draft PR
-
-## When Stuck
-
-- Ask a clarifying question before making large speculative changes
-- Propose a short plan for complex tasks
-- Open a draft PR with notes if unsure about approach
-- Fix type errors before test failures - they're often the root cause
-- Run `yarn prisma generate` if you see missing enum/type errors
-
-## Spec-Driven Development (Opt-In)
-
-For complex features, you can use spec-driven development when explicitly requested.
-
-**To enable:** Tell the AI "use spec-driven development" or "follow the spec workflow"
-
-See [SPEC-WORKFLOW.md](SPEC-WORKFLOW.md) for the full workflow documentation.
-
-## Extended Documentation
-
-For detailed information, see the `agents/` directory:
-
-- **[agents/README.md](agents/README.md)** - Rules index and architecture overview
-- **[agents/rules/](agents/rules/)** - Modular engineering rules
-- **[agents/commands.md](agents/commands.md)** - Complete command reference
-- **[agents/knowledge-base.md](agents/knowledge-base.md)** - Domain knowledge and business rules
