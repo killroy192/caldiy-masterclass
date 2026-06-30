@@ -15,6 +15,12 @@ export type GetSlots = {
   dateRanges: DateRange[];
   minimumBookingNotice: number;
   eventLength: number;
+  /**
+   * Post-meeting gap (in minutes) enforced after each booking. Added to the slot
+   * increment so the next bookable slot starts only after the meeting ends + buffer.
+   * It deliberately does NOT affect the calendar invite duration (see buffer-time spec D-2).
+   */
+  bufferTime?: number;
   offsetStart?: number;
   datesOutOfOffice?: IOutOfOfficeData;
   showOptimizedSlots?: boolean | null;
@@ -72,6 +78,7 @@ function buildSlotsWithDateRanges({
   dateRanges,
   frequency,
   eventLength,
+  bufferTime,
   timeZone,
   minimumBookingNotice,
   offsetStart,
@@ -82,6 +89,7 @@ function buildSlotsWithDateRanges({
   dateRanges: DateRange[];
   frequency: number;
   eventLength: number;
+  bufferTime?: number;
   timeZone: string;
   minimumBookingNotice: number;
   offsetStart?: number;
@@ -93,6 +101,9 @@ function buildSlotsWithDateRanges({
   frequency = minimumOfOne(frequency);
   eventLength = minimumOfOne(eventLength);
   offsetStart = offsetStart ? minimumOfOne(offsetStart) : 0;
+  // Post-meeting buffer consumed silently between bookings. The meeting itself still
+  // fits within `eventLength`, but the next slot is pushed out by `bufferAfter`.
+  const bufferAfter = bufferTime && bufferTime > 0 ? bufferTime : 0;
 
   const orderedDateRanges = dateRanges.sort((a, b) => a.start.valueOf() - b.start.valueOf());
 
@@ -162,7 +173,10 @@ function buildSlotsWithDateRanges({
       }
 
       if (prevBoundary) {
-        const prevBoundaryEnd = dayjs(prevBoundary).add(frequency + (offsetStart ?? 0), "minutes");
+        const prevBoundaryEnd = dayjs(prevBoundary).add(
+          frequency + bufferAfter + (offsetStart ?? 0),
+          "minutes"
+        );
         if (prevBoundaryEnd.isAfter(slotStartTime)) {
           const dayjsPrevBoundary = dayjs(prevBoundary);
           if (!dayjsPrevBoundary.isBefore(range.start)) {
@@ -178,7 +192,7 @@ function buildSlotsWithDateRanges({
     while (!slotStartTime.add(eventLength, "minutes").subtract(1, "second").utc().isAfter(range.end)) {
       const slotKey = slotStartTime.toISOString();
       if (slots.has(slotKey)) {
-        slotStartTime = slotStartTime.add(frequency + (offsetStart ?? 0), "minutes");
+        slotStartTime = slotStartTime.add(frequency + bufferAfter + (offsetStart ?? 0), "minutes");
         continue;
       }
 
@@ -222,7 +236,7 @@ function buildSlotsWithDateRanges({
       }
 
       slots.set(slotKey, slotData);
-      slotStartTime = slotStartTime.add(frequency + (offsetStart ?? 0), "minutes");
+      slotStartTime = slotStartTime.add(frequency + bufferAfter + (offsetStart ?? 0), "minutes");
     }
   });
 
@@ -235,6 +249,7 @@ const getSlots = ({
   minimumBookingNotice,
   dateRanges,
   eventLength,
+  bufferTime,
   offsetStart = 0,
   datesOutOfOffice,
   showOptimizedSlots,
@@ -252,6 +267,7 @@ const getSlots = ({
     dateRanges,
     frequency,
     eventLength,
+    bufferTime,
     timeZone: getTimeZone(inviteeDate),
     minimumBookingNotice,
     offsetStart,

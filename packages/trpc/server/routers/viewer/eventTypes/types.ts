@@ -145,6 +145,7 @@ const BaseEventTypeUpdateInput: z.ZodType<TUpdateInputSchema> = z
     minimumBookingNotice: z.number().min(0).optional(),
     beforeEventBuffer: z.number().int().optional(),
     afterEventBuffer: z.number().int().optional(),
+    bufferTime: z.number().int().min(0).max(60).optional().default(0),
     seatsPerTimeSlot: z.number().min(1).max(MAX_SEATS_PER_TIME_SLOT).nullable().optional(),
     onlyShowFirstAvailableSlot: z.boolean().optional(),
     showOptimizedSlots: z.boolean().nullable().optional(),

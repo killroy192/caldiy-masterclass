@@ -1091,6 +1091,7 @@ export class AvailableSlotsService {
     const timeSlots = getSlots({
       inviteeDate: startTime,
       eventLength: input.duration || eventType.length,
+      bufferTime: eventType.bufferTime ?? 0,
       offsetStart: eventType.offsetStart,
       dateRanges: aggregatedAvailability,
       minimumBookingNotice: eventType.minimumBookingNotice,

@@ -578,6 +578,36 @@ export const EventLimitsTab = ({ eventType, customClassNames }: EventLimitsTabPr
           </div>
         </div>
         <div className="stack-y-4 lg:stack-y-0 flex flex-col lg:flex-row lg:space-x-4">
+          <div className="w-full">
+            <Label htmlFor="bufferTime">
+              {t("buffer_time_after_meeting")}
+              {shouldLockIndicator("bufferTime")}
+            </Label>
+            <Controller
+              name="bufferTime"
+              render={({ field: { onChange, value } }) => {
+                const bufferTimeOptions = [0, 5, 10, 15, 30, 60].map((minutes) => ({
+                  label: minutes === 0 ? t("event_buffer_default") : `${minutes} ${t("minutes")}`,
+                  value: minutes,
+                }));
+                return (
+                  <Select
+                    isSearchable={false}
+                    onChange={(val) => {
+                      if (val) onChange(val.value);
+                    }}
+                    isDisabled={shouldLockDisableProps("bufferTime").disabled}
+                    defaultValue={
+                      bufferTimeOptions.find((option) => option.value === value) || bufferTimeOptions[0]
+                    }
+                    options={bufferTimeOptions}
+                  />
+                );
+              }}
+            />
+          </div>
+        </div>
+        <div className="stack-y-4 lg:stack-y-0 flex flex-col lg:flex-row lg:space-x-4">
           <div
             className={classNames(
               "w-full",
