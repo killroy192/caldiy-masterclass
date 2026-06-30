@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "miro-mcp": {
+      "description": "Official Miro MCP — read boards, extract context, and create diagrams, documents, and tables for AI-assisted planning and architecture work. Requires Miro OAuth; do not duplicate if the Miro Cursor plugin is already installed.",
+      "url": "https://mcp.miro.com/"
+    }
+  }
+}
