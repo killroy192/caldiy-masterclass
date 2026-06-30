@@ -41,4 +41,7 @@ export enum ErrorCode {
   BookerEmailRequiresLogin = "booker_email_requires_login",
   InvalidVerificationCode = "invalid_verification_code",
   UnableToValidateVerificationCode = "unable_to_validate_verification_code",
+  InstantMeetingNoCalendar = "instant_meeting_no_calendar",
+  InstantMeetingVideoUnavailable = "instant_meeting_video_unavailable",
+  InstantMeetingHostBusy = "instant_meeting_host_busy",
 }
