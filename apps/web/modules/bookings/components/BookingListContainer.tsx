@@ -28,6 +28,7 @@ import {
 import type { BookingListingStatus, BookingsGetOutput, RowData } from "../types";
 import { BookingDetailsSheet } from "./BookingDetailsSheet";
 import { BookingList } from "./BookingList";
+import { StartInstantMeetingButton } from "./StartInstantMeetingButton";
 import { ViewToggleButton } from "./ViewToggleButton";
 
 interface FilterButtonProps {
@@ -187,6 +188,7 @@ function BookingListInner({
         {/* Desktop: auto-pushed to right via flex-grow spacer, Mobile: continue on second row */}
         <div className="hidden grow md:block" />
 
+        {status === "upcoming" && <StartInstantMeetingButton />}
         <DataTableSegment.Select />
         {/* <BookingsCsvDownload status={status} /> */}
         {bookingsV3Enabled && <ViewToggleButton bookingsV3Enabled={bookingsV3Enabled} />}

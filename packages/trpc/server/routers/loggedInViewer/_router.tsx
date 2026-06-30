@@ -7,6 +7,7 @@ import { ZEventTypeOrderInputSchema } from "./eventTypeOrder.schema";
 import { ZNoShowInputSchema } from "./markNoShow.schema";
 import { teamsAndUserProfilesQuery } from "./procedures/teamsAndUserProfilesQuery";
 import { ZRemoveNotificationsSubscriptionInputSchema } from "./removeNotificationsSubscription.schema";
+import { ZStartInstantMeetingInputSchema } from "./startInstantMeeting.schema";
 
 type AppsRouterHandlerCache = {
   stripeCustomer?: typeof import("./stripeCustomer.handler").stripeCustomerHandler;
@@ -17,6 +18,7 @@ type AppsRouterHandlerCache = {
   addNotificationsSubscription?: typeof import("./addNotificationsSubscription.handler").addNotificationsSubscriptionHandler;
   removeNotificationsSubscription?: typeof import("./removeNotificationsSubscription.handler").removeNotificationsSubscriptionHandler;
   markNoShow?: typeof import("./markNoShow.handler").markNoShow;
+  startInstantMeeting?: typeof import("./startInstantMeeting.handler").startInstantMeetingHandler;
 };
 
 export const loggedInViewerRouter = router({
@@ -64,4 +66,10 @@ export const loggedInViewerRouter = router({
     const { markNoShow } = await import("./markNoShow.handler");
     return markNoShow(opts);
   }),
+  startInstantMeeting: authedProcedure
+    .input(ZStartInstantMeetingInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { startInstantMeetingHandler } = await import("./startInstantMeeting.handler");
+      return startInstantMeetingHandler({ ctx, input });
+    }),
 });
